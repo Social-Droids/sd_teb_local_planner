@@ -372,6 +372,8 @@ private:
   nav2_costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
   TFBufferPtr tf_; //!< pointer to Transform Listener
   TebConfig::UniquePtr cfg_; //!< Config class that stores and manages all related parameters
+  bool plan_to_global_tf_init;
+  geometry_msgs::msg::TransformStamped plan_to_global_transform;
     
   // internal objects (memory management owned)
   PlannerInterfacePtr planner_; //!< Instance of the underlying optimal planner class

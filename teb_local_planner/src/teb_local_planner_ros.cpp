@@ -71,7 +71,8 @@ TebLocalPlannerROS::TebLocalPlannerROS()
     : costmap_ros_(nullptr), tf_(nullptr), cfg_(new TebConfig()), costmap_model_(nullptr), intra_proc_node_(nullptr),
                                            costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
                                            custom_via_points_active_(false), no_infeasible_plans_(0),
-                                           last_preferred_rotdir_(RotType::none), initialized_(false)
+                                           last_preferred_rotdir_(RotType::none), initialized_(false),
+                                           plan_to_global_tf_init(false)
 {
 }
 
@@ -550,9 +551,9 @@ void TebLocalPlannerROS::updateObstacleContainerWithCustomObstacles()
     try 
     {
       geometry_msgs::msg::TransformStamped obstacle_to_map = tf_->lookupTransform(
-                  cfg_->map_frame, tf2::timeFromSec(0),
-                  custom_obstacle_msg_.header.frame_id, tf2::timeFromSec(0),
-                  custom_obstacle_msg_.header.frame_id, tf2::durationFromSec(0.5));
+                  cfg_->map_frame, tf2::TimePointZero,
+                  custom_obstacle_msg_.header.frame_id, tf2::TimePointZero,
+                  custom_obstacle_msg_.header.frame_id, tf2::durationFromSec(1.5));
       obstacle_to_map_eig = tf2::transformToEigen(obstacle_to_map);
       //tf2::fromMsg(obstacle_to_map.transform, obstacle_to_map_eig);
     }
@@ -712,11 +713,29 @@ bool TebLocalPlannerROS::transformGlobalPlan(const std::vector<geometry_msgs::ms
     }
 
     // get plan_to_global_transform from plan frame to global_frame
-    geometry_msgs::msg::TransformStamped plan_to_global_transform = tf_->lookupTransform(
-                global_frame, tf2_ros::fromMsg(plan_pose.header.stamp),
-                plan_pose.header.frame_id, tf2::timeFromSec(0),
-                plan_pose.header.frame_id, tf2::durationFromSec(0.5));
+    // geometry_msgs::msg::TransformStamped plan_to_global_transform = tf_->lookupTransform(
+    //             global_frame, tf2_ros::fromMsg(plan_pose.header.stamp),
+    //             plan_pose.header.frame_id, tf2::TimePointZero,
+    //             plan_pose.header.frame_id, tf2::durationFromSec(1.5));
+    // geometry_msgs::msg::TransformStamped plan_to_global_transform;
+    try 
+    {
+      plan_to_global_transform = tf_->lookupTransform(global_frame,
+                                                      plan_pose.header.frame_id,
+                                                      tf2::TimePointZero);
+      plan_to_global_tf_init = true;
+    }
+    catch (tf2::ExtrapolationException& ex) 
+    {
+      if (!plan_to_global_tf_init) 
+      {
+        RCLCPP_ERROR(logger_, "Extrapolation Error: %s\n", ex.what());
+        if (global_plan.size() > 0)
+          RCLCPP_ERROR(logger_, "Global Frame: %s Plan Frame size %d: %s\n", global_frame.c_str(), (unsigned int)global_plan.size(), global_plan[0].header.frame_id.c_str());
 
+        return false;
+      }
+    }
 //    tf_->waitForTransform(global_frame, ros::Time::now(),
 //    plan_pose.header.frame_id, plan_pose.header.stamp,
 //    plan_pose.header.frame_id, ros::Duration(0.5));
@@ -824,14 +843,14 @@ bool TebLocalPlannerROS::transformGlobalPlan(const std::vector<geometry_msgs::ms
     RCLCPP_ERROR(logger_, "Connectivity Error: %s\n", ex.what());
     return false;
   }
-  catch(tf2::ExtrapolationException& ex)
-  {
-    RCLCPP_ERROR(logger_, "Extrapolation Error: %s\n", ex.what());
-    if (global_plan.size() > 0)
-      RCLCPP_ERROR(logger_, "Global Frame: %s Plan Frame size %d: %s\n", global_frame.c_str(), (unsigned int)global_plan.size(), global_plan[0].header.frame_id.c_str());
-
-    return false;
-  }
+  // catch(tf2::ExtrapolationException& ex)
+  // {
+  //   RCLCPP_ERROR(logger_, "Extrapolation Error: %s\n", ex.what());
+  //   if (global_plan.size() > 0)
+  //     RCLCPP_ERROR(logger_, "Global Frame: %s Plan Frame size %d: %s\n", global_frame.c_str(), (unsigned int)global_plan.size(), global_plan[0].header.frame_id.c_str());
+  //
+  //   return false;
+  // }
 
   return true;
 }
